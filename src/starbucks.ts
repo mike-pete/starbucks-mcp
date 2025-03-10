@@ -68,6 +68,27 @@ export async function getMenuCategories() {
     return menusWithProducts
 }
 
-// getMenuCategories()
+export async function getCategory(categoryId: string){
+    const resp = await fetch('https://app.starbucks.com/bff/ordering/menu')
+	const menus = z.array(menuSchema).parse((await resp.json())['menus'])
 
-// function getCategoryItems() {}
+	const dfs = (menus: Menu[]): Menu | null => {
+		for (const menu of menus) {
+			const { children, id } = menu
+			if (id === categoryId) {
+                return menu
+			}
+			if (children.length > 0) {
+			    const result = dfs(children)
+                if (result !== null){
+                    return result
+                }
+			}
+		}
+        return null
+	}
+
+	return dfs(menus)
+}
+
+// getCategory('lemonade-refreshers').then(x => console.log(x))
