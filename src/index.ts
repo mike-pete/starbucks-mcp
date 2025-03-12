@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
-import { getCategory, getMenuCategories } from './starbucks'
+import { getCategory, getMenuCategories } from './menu'
 
 const server = new McpServer({
 	name: 'Starbucks',
@@ -21,8 +21,6 @@ const server = new McpServer({
 // 	}
 // })
 
-// 	const request = await fetch('https://app.starbucks.com/bff/ordering/menu')
-// 	const menu = await request.json()
 
 server.tool('get_menu_categories', 'get menu categories', {}, async (): Promise<CallToolResult> => {
 	const menuCategories = await getMenuCategories()
