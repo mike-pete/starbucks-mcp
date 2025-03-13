@@ -1,5 +1,5 @@
 import { chromium } from 'playwright'
-import xx from './main'
+import example from './main'
 
 async function openStarbucks() {
 	// Launch the browser in headed mode
@@ -7,7 +7,12 @@ async function openStarbucks() {
 		headless: false, // This makes the browser visible
 	})
 
-	const context = await browser.newContext()
+	// Create context with location permissions granted
+	const context = await browser.newContext({
+		permissions: ['geolocation'],
+		geolocation: { latitude: 37.7749, longitude: -122.4194 }, // Default to San Francisco coordinates
+	})
+
 	const page = await context.newPage()
 
 	// Navigate to Starbucks cart
@@ -22,7 +27,7 @@ async function openStarbucks() {
 	await page.evaluate((valueToStore) => {
 		return new Promise((resolve, reject) => {
 			let retries = 0
-			const maxRetries = 3 
+			const maxRetries = 3
 
 			function tryOpen() {
 				try {
@@ -60,7 +65,10 @@ async function openStarbucks() {
 
 			tryOpen()
 		})
-	}, xx) // Pass xx here as an argument
+		// Pass xx here as an argument
+	}, example) 
+	
+	// console.log(xx)
 
 	console.log('Successfully added value to IndexedDB')
 	// Perform a hard refresh
