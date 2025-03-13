@@ -1,4 +1,5 @@
 import { chromium } from 'playwright'
+import xx from './main'
 
 async function openStarbucks() {
 	// Launch the browser in headed mode
@@ -12,51 +13,59 @@ async function openStarbucks() {
 	// Navigate to Starbucks cart
 	await page.goto('https://www.starbucks.com/menu/cart')
 
-	// Wait for page to load and get cookies
+	// Wait for network to be idle and page to be fully loaded
 	await page.waitForLoadState('networkidle')
+	await page.waitForLoadState('domcontentloaded')
+	await page.waitForTimeout(2000) // Give extra time for IndexedDB to be ready
 
-	// Make the price-order-guest request using page's context
-	const response = await page.evaluate(async () => {
-		const resp = await fetch('https://www.starbucks.com/bff/proxy/orchestra/price-order-guest', {
-			method: 'POST',
-			headers: {
-				accept: 'application/json',
-				'content-type': 'application/json',
-				'x-requested-with': 'XMLHttpRequest',
-			},
-			body: JSON.stringify({
-				variables: {
-					order: {
-						cart: {
-							items: [
-								{
-									quantity: 1,
-									commerce: { sku: '11168400' },
-									childItems: [],
-									key: '2124867/hot:Grande-0',
-								},
-								{
-									quantity: 1,
-									commerce: { sku: '11168400' },
-									childItems: [],
-									key: '2124867/hot:Grande-1',
-								},
-							],
-							offers: [],
-						},
-						fulfillment: {
-							consumptionType: 'CONSUME_OUT_OF_STORE',
-							collectionType: 'IN_STORE',
-						},
-						storeNumber: '47903-260244',
-					},
-				},
-			}),
+	// Pass xx as an argument to evaluate
+	await page.evaluate((valueToStore) => {
+		return new Promise((resolve, reject) => {
+			let retries = 0
+			const maxRetries = 3 
+
+			function tryOpen() {
+				try {
+					const request = indexedDB.open('keyval-store', 1)
+
+					request.onerror = () => {
+						if (retries < maxRetries) {
+							retries++
+							setTimeout(tryOpen, 1000)
+						} else {
+							reject(request.error)
+						}
+					}
+
+					request.onsuccess = () => {
+						const db = request.result
+						const tx = db.transaction('keyval', 'readwrite')
+						const store = tx.objectStore('keyval')
+
+						// Use the passed value
+						store.put(valueToStore, 'ordering')
+
+						tx.oncomplete = () => resolve(undefined)
+						tx.onerror = () => reject(tx.error)
+					}
+				} catch (err) {
+					if (retries < maxRetries) {
+						retries++
+						setTimeout(tryOpen, 1000)
+					} else {
+						reject(err)
+					}
+				}
+			}
+
+			tryOpen()
 		})
-		return resp.json()
-	})
+	}, xx) // Pass xx here as an argument
 
-	console.log('Response:', response)
+	console.log('Successfully added value to IndexedDB')
+	// Perform a hard refresh
+	await page.reload({ waitUntil: 'networkidle' })
+	// console.log('Page has been hard refreshed')
 
 	// Keep browser open until user presses Enter
 	console.log('Press Enter to close the browser...')
@@ -114,7 +123,7 @@ openStarbucks().catch(console.error)
 //       "x-dq7hy5l1-f": "AxZURIGVAQAAuIBmGPVcf_2GuO8_GbdGuff7ax4CstJ30jKLNuTig-IcyZSNAYgY2mOuckX5wH9eCOfvosJeCA==",
 //       "x-dq7hy5l1-z": "q",
 //       "x-requested-with": "XMLHttpRequest",
-//       "cookie": "optimizelyEndUserId=oeu1741365800255r0.6901317401034972; ux_exp_id=6f3723b7-8233-4140-88b3-44e85dce8340; ASLBSA=00038f952e2a0e4383b269b31ee1c78eb55416d298f826927ef4ff9ef6ab361c81bb; ASLBSACORS=00038f952e2a0e4383b269b31ee1c78eb55416d298f826927ef4ff9ef6ab361c81bb; fp_token_7c6a6574-f011-4c9a-abdd-9894a102ccef=g7YvvucMrhP3pcHCgLkPIVxTb7F3DYfP3sOrTVDbe+c=; optimizelySession=0; .SbuxExtended=FD9D7085CC5571E7D41FDDC2A857BA21F25A1EF8A99EAB78CBFA5C850ADAD934C39A939EC7418B49FD06D312324A44059F96F4F979E8C8F3CBF061785D6CA48EEF79B8F0CD8C41C9A423273A37DC02FEFEDF6EB35379756753792CE6F0E0110D04C1005F420B5BC833D4ACB94A7588A309433F2EBF883540AA87D3C7A0F3D197A04079D38A7C0D43B3EDB060AA559980EE0FBA86755F3A8FA53E9217BCA63AEF127D3F54DD1FB78639E5940CD7287FC5D7B9D0404911F7AD276E6147F33A93ECA4073FA833DFEC2433761A0676A5651ED11012D7B68DC809C683E9F71DAA4FC90E24CE0F5201E909897FB0258579499588C12EE6DC6C833E351D266E052D41EB086DFA20770857867B6F3BAF8A627BE11E39F0EA06CB637526200843E3006BC56FC5D433DAAF82DF78099B03C77BBF5DB85B8C56E3534DD7D484B91D1A3063E6; sbux_urid=32bfe99b-60a3-48f4-8e17-b23c471e4301; .SbuxOat=44B14EE02CD76351D9A328553CD4490ED3F6672BD2EB02DC473E01841B824D253D807A2816A4FD7577B40D78B66B095FEBA6F6447E545A1CEAD12EEFE0A8D8D06DAE8F48604B02D83E54373FAB479F95EF9E396B70583EA296972C74EAE286D5064A14668583EF983AE0F0E8B50262D1777DF584F0D80D02FCF2CCCB5C86F4A175D2D496B2103470E2757D5B5E1F683E998B4C70F1FC4B191C84BF403392148F0737D7299A15B671E9CE913F6DFE489863E5FE1BD0BD469F35477344EE780ABE260CC3002D89D2DA9C7A8AD65EB063D4A9930C40DED0054B0F54999F2D52E3F3FF557FBF88DA87F1D848582B516DC2E34B0822B02D582C25278063389F3F59EB1BECF5A3BD263E917DFF48421D1A540EF55C0800531F92EA0C042BBEA184C0000869962602BA62B4F475FA9A2AB6E7C995C5D17548E286C9C095B40794AE7F17F933660F5E7D8E8AB005183464827B39D9497A20AA4FAFBB09F8D3A62DDA899BA002C3CFF86F1EBB907E712863130510280DBE5026787F2BCEBA15C839D19F29C12C78BE08F2644E8022B0DFDFA48AA21C81AC67F8A9E6BF0B608240FC35DD4D7BF76D6E01902C1605A62BC4468D3593; s_check=%7B%22value%22%3A%22d6599070-fdd5-11ef-b074-fbf311cc3272%22%2C%22extended%22%3A1744220033783%7D; TAsessionID=e81babf2-3616-499a-b670-1fa4a9908439|EXISTING; cfq3cTKk; notice_behavior=implied,us; notice_gdpr_prefs=0,1,2:; notice_preferences=2:; cmapi_gtm_bl=; cmapi_cookie_privacy=permit 1,2,3; tiWQK2tY=A2KCfXGVAQAAhD1m5I6XkUScxaF12V-hrgdfuuGA8DfxpxhPR3grTui6jFmMAYgY2mOuckX5wH9eCOfvosJeCA|1|1|8ed1c4a27e4102e67759b43d38a817fb371e778f",
+//       "cookie": "optimizelyEndUserId=oeu1741365800255r0.6901317401034972; ux_exp_id=6f3723b7-8233-4140-88b3-44e85dce8340; ASLBSA=00038f952e2a0e4383b269b31ee1c78eb55416d298f826927ef4ff9ef6ab361c81bb; ASLBSACORS=00038f952e2a0e4383b269b31ee1c78eb55416d298f826927ef4ff9ef6ab361c81bb; fp_token_7c6a6574-f011-4c9a-abdd-9894a102ccef=g7YvvucMrhP3pcHCgLkPIVxTb7F3DYfP3sOrTVDbe+c=; optimizelySession=0; .SbuxExtended=FD9D7085CC5571E7D41FDDC2A857BA21F25A1EF8A99EAB78CBFA5C850ADAD934C39A939EC7418B49FD06D312324A44059F96F4F979E8C8F3CBF061785D6CA48EEF79B8F0CD8C41C9A423273A37DC02FEFEDF6EB35379756753792CE6F0E0110D04C1005F420B5BC833D4ACB94A7588A309433F2EBF883540AA87D3C7A0F3D197A04079D38A7C0D43B3EDB060AA559980EE0FBA86755F3A8FA53E9217BCA63AEF127D3F54DD1FB78639E5940CD7287FC5D7B9D0404911F7AD276E6147F33A93ECA4073FA833DFEC2433761A0676A5651ED11012D7B68DC809C683E9F71DAA4FC90E24CE0F5201E909897FB0258579499588C12EE6DC6C833E351D266E052D41EB086DFA20770857867B6F3BAF8A627BE11E39F0EA06CB637526200843E3006BC56FC5D433DAAF82DF78099B03C77BBF5DB85B8C56E3534DD7D484B91D1A3063E6; s_check=%7B%22value%22%3A%22d6599070-fdd5-11ef-b074-fbf311cc3272%22%2C%22extended%22%3A1744220033783%7D; TAsessionID=e81babf2-3616-499a-b670-1fa4a9908439|EXISTING; cfq3cTKk; notice_behavior=implied,us; notice_gdpr_prefs=0,1,2:; notice_preferences=2:; cmapi_gtm_bl=; cmapi_cookie_privacy=permit 1,2,3; tiWQK2tY=A2KCfXGVAQAAhD1m5I6XkUScxaF12V-hrgdfuuGA8DfxpxhPR3grTui6jFmMAYgY2mOuckX5wH9eCOfvosJeCA|1|1|8ed1c4a27e4102e67759b43d38a817fb371e778f",
 //       "Referer": "https://www.starbucks.com/menu/cart",
 //       "Referrer-Policy": "strict-origin-when-cross-origin"
 //     },
